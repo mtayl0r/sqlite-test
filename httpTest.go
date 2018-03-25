@@ -1,17 +1,19 @@
 package main
 
 import (
+    "os"
+    "flag"
     "fmt"
     "strconv"
     "math/rand"
     "net/http"
     "database/sql"
-    //_ "github.com/mattn/go-sqlite3"
+    _ "github.com/mattn/go-sqlite3"
 	_ "github.com/lib/pq"
 )
 
 func simple(w http.ResponseWriter, r *http.Request) {
-    fmt.Fprintf(w, "Hellow world")
+    fmt.Fprintf(w, "Hello world")
     insertCount = 0
 }
 
@@ -41,7 +43,7 @@ func querySql() string {
 func insertSql(s string) int {
     insertCount += 1
     s = s + strconv.Itoa(insertCount)
-	_, err = db.Exec("insert into foo(name) values('" + s + "');")
+	_, err := db.Exec("insert into foo(name) values('" + s + "');")
 	if err != nil {
 		return 0
 	}
@@ -68,11 +70,48 @@ func insert(w http.ResponseWriter, r *http.Request) {
     fmt.Fprintf(w, "insert: %i %s", i, s)
 }
 
-//var db, err = sql.Open("sqlite3", "./foo.db")
-var db, err = sql.Open("postgres", "user=mark password=00zerozero dbname=test2 sslmode=disable")
 var insertCount = 0
 
+var insertTxt string
+var db *sql.DB
+
 func main() {
+
+    sqliteCmd := flag.NewFlagSet("sqlite", flag.ExitOnError)
+    namePtr := sqliteCmd.String("name", "foo.db", "Sqlite database file name.")
+
+    postgresCmd := flag.NewFlagSet("postgres", flag.ExitOnError)
+    userPtr := postgresCmd.String("username", "", "Postgres username. (Required)")
+    passwordPtr := postgresCmd.String("password", "", "Postgres password. (Required)")
+    dbNamePtr := postgresCmd.String("dbName", "", "Postgres database name. (Required)")
+
+    switch os.Args[1] {
+        case "sqlite":
+            sqliteCmd.Parse(os.Args[2:])
+        case "postgres":
+            postgresCmd.Parse(os.Args[2:])
+    }
+
+    if postgresCmd.Parsed() {
+        connStr := fmt.Sprintf("user=%s password=%s dbname=%s sslmode=disable", *userPtr, *passwordPtr, *dbNamePtr)
+        fmt.Printf(connStr + "\n")
+	    db, _ = sql.Open("postgres", connStr)
+        insertTxt = "insert into foo (name) values ($1);"
+	    defer db.Close()
+    } else if sqliteCmd.Parsed() {
+        fmt.Printf("sqlite: %s\n", *namePtr)
+	    db, _ = sql.Open("sqlite3", *namePtr)
+        insertTxt = "insert into foo (name) values (?);"
+	    defer db.Close()
+    } else {
+        fmt.Printf("sqlite:\n")
+        sqliteCmd.PrintDefaults()
+        fmt.Printf("postgres:\n")
+        postgresCmd.PrintDefaults()
+        os.Exit(1)
+    }
+
+
     http.HandleFunc("/simple", simple)
     http.HandleFunc("/query", query)
     http.HandleFunc("/insert", insert)

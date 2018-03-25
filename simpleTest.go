@@ -1,26 +1,54 @@
 package main
 
 import (
+    "os"
+	"flag"
 	"fmt"
 	"log"
 	"time"
-    "math/rand"
+    //"math/rand"
 	"database/sql"
 	_ "github.com/mattn/go-sqlite3"
-	//_ "github.com/lib/pq"
+	_ "github.com/lib/pq"
 )
 
 func main() {
+    sqliteCmd := flag.NewFlagSet("sqlite", flag.ExitOnError)
+    namePtr := sqliteCmd.String("name", "foo.db", "Sqlite database file name.")
 
-    insertSql := "insert into foo (name) values (?);"
-    //insertSql := "insert into foo (name) values ($1);"
+    postgresCmd := flag.NewFlagSet("postgres", flag.ExitOnError)
+    userPtr := postgresCmd.String("username", "", "Postgres username. (Required)")
+    passwordPtr := postgresCmd.String("password", "", "Postgres password. (Required)")
+    dbNamePtr := postgresCmd.String("dbName", "", "Postgres database name. (Required)")
 
-	db, err := sql.Open("sqlite3", "./foo.db")
-	//db, err := sql.Open("postgres", "user=mark password=00zerozero dbname=test2 sslmode=disable")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
+    switch os.Args[1] {
+        case "sqlite":
+            sqliteCmd.Parse(os.Args[2:])
+        case "postgres":
+            postgresCmd.Parse(os.Args[2:])
+    }
+
+    var insertSql string
+    var db *sql.DB
+
+    if postgresCmd.Parsed() {
+        connStr := fmt.Sprintf("user=%s password=%s dbname=%s sslmode=disable", *userPtr, *passwordPtr, *dbNamePtr)
+        fmt.Printf(connStr + "\n")
+	    db, _ = sql.Open("postgres", connStr)
+        insertSql = "insert into foo (name) values ($1);"
+	    defer db.Close()
+    } else if sqliteCmd.Parsed() {
+        fmt.Printf("sqlite: %s\n", *namePtr)
+	    db, _ = sql.Open("sqlite3", *namePtr)
+        insertSql = "insert into foo (name) values (?);"
+	    defer db.Close()
+    } else {
+        fmt.Printf("sqlite:\n")
+        sqliteCmd.PrintDefaults()
+        fmt.Printf("postgres:\n")
+        postgresCmd.PrintDefaults()
+        os.Exit(1)
+    }
 
 	/* transaction test */
 
@@ -48,7 +76,7 @@ func main() {
     fmt.Println(elapsed)
 
 	tx.Commit()
-    
+
 	/* prepared stmt test */
 
     stmt, err = db.Prepare(insertSql)
@@ -74,7 +102,7 @@ func main() {
     start = time.Now().UnixNano()
 
 	for i := 0; i < 10000; i++ {
-        sql := fmt.Sprintf("insert into foo (name) values ('こんにちわ世界%03d');", i)
+        sql := fmt.Sprintf(fmt.Sprintf("insert into foo (name) values ('こんにちわ世界%03d');", i))
 		_, err = db.Exec(sql)
 		if err != nil {
 			log.Fatal(err)
@@ -85,26 +113,27 @@ func main() {
     fmt.Println(elapsed)
 
     // simple select
-    stmt, err = db.Prepare("select name from foo where id = ?")
-    //stmt, err = db.Prepare("select name from foo where id = $1")
+    stmt, err = db.Prepare("select count(*) as count from foo;")
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer stmt.Close()
-	var name string
-	err = stmt.QueryRow("1").Scan(&name)
+	var count string
+	err = stmt.QueryRow().Scan(&count)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(name)
+	fmt.Println(count)
 
 }
 
 func randString(len int) string {
-    var s = make([]byte, len)
+/*    var s = make([]byte, len)
     for i := 0; i < len; i++ {
         s[i] = (byte)(rand.Intn(26)+65)
     }
     return string(s)
+*/
+    return "random string"
 }
 
