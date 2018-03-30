@@ -6,7 +6,7 @@ import (
     "fmt"
     "log"
     "time"
-    //"math/rand"
+    "math/rand"
     "database/sql"
     _ "github.com/mattn/go-sqlite3"
     _ "github.com/lib/pq"
@@ -15,6 +15,8 @@ import (
 func main() {
     sqliteCmd := flag.NewFlagSet("sqlite", flag.ExitOnError)
     namePtr := sqliteCmd.String("name", "foo.db", "Sqlite database file name.")
+    syncPtr := sqliteCmd.String("sync", "full", "PRAGMA synchronous = sync.")
+    jmPtr := sqliteCmd.String("jm", "delete", "PRAGMA journal_mode = jm.")
 
     postgresCmd := flag.NewFlagSet("postgres", flag.ExitOnError)
     userPtr := postgresCmd.String("username", "", "Postgres username. (Required)")
@@ -38,8 +40,19 @@ func main() {
         insertSql = "insert into foo (name) values ($1);"
         defer db.Close()
     } else if sqliteCmd.Parsed() {
-        fmt.Printf("sqlite: %s\n", *namePtr)
+        fmt.Printf("sqlite: %s %s %s\n", *namePtr, *syncPtr, *jmPtr)
         db, _ = sql.Open("sqlite3", *namePtr)
+
+        _, err := db.Exec(fmt.Sprintf("PRAGMA synchronous = %s;", *syncPtr))
+        if err != nil {
+            log.Fatal(err)
+        }
+
+        _, err = db.Exec(fmt.Sprintf("PRAGMA journal_mode = %s;", *jmPtr))
+        if err != nil {
+            log.Fatal(err)
+        }
+
         insertSql = "insert into foo (name) values (?);"
         defer db.Close()
     } else {
@@ -127,12 +140,10 @@ func main() {
 }
 
 func randString(len int) string {
-/*    var s = make([]byte, len)
+    var s = make([]byte, len)
     for i := 0; i < len; i++ {
         s[i] = (byte)(rand.Intn(26)+65)
     }
     return string(s)
-*/
-    return "random string"
 }
 

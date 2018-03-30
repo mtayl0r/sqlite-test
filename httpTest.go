@@ -23,7 +23,6 @@ func query(w http.ResponseWriter, r *http.Request) {
 }
 
 func querySql() string {
-
     rows, err := db.Query("select * from foo where id = 2;")
     if err != nil {
         panic(err)
@@ -31,22 +30,22 @@ func querySql() string {
     defer rows.Close()
     var name string
     for rows.Next() {
-		var id int
-		err = rows.Scan(&id, &name)
-		if err != nil {
+        var id int
+        err = rows.Scan(&id, &name)
+        if err != nil {
             panic(err)
-		}
-	}
+        }
+    }
     return name
 }
 
 func insertSql(s string) int {
     insertCount += 1
     s = s + strconv.Itoa(insertCount)
-	_, err := db.Exec("insert into foo(name) values('" + s + "');")
-	if err != nil {
-		return 0
-	}
+    _, err := db.Exec("insert into foo(name) values('" + s + "');")
+    if err != nil {
+        return 0
+    }
     return 1
 }
 
@@ -79,6 +78,8 @@ func main() {
 
     sqliteCmd := flag.NewFlagSet("sqlite", flag.ExitOnError)
     namePtr := sqliteCmd.String("name", "foo.db", "Sqlite database file name.")
+    syncPtr := sqliteCmd.String("sync", "full", "PRAGMA synchronous = sync.")
+    jmPtr := sqliteCmd.String("jm", "delete", "PRAGMA journal_mode = jm.")
 
     postgresCmd := flag.NewFlagSet("postgres", flag.ExitOnError)
     userPtr := postgresCmd.String("username", "", "Postgres username. (Required)")
@@ -95,14 +96,25 @@ func main() {
     if postgresCmd.Parsed() {
         connStr := fmt.Sprintf("user=%s password=%s dbname=%s sslmode=disable", *userPtr, *passwordPtr, *dbNamePtr)
         fmt.Printf(connStr + "\n")
-	    db, _ = sql.Open("postgres", connStr)
+        db, _ = sql.Open("postgres", connStr)
         insertTxt = "insert into foo (name) values ($1);"
-	    defer db.Close()
+        defer db.Close()
     } else if sqliteCmd.Parsed() {
-        fmt.Printf("sqlite: %s\n", *namePtr)
-	    db, _ = sql.Open("sqlite3", *namePtr)
+        fmt.Printf("sqlite: %s %s %s\n", *namePtr, *syncPtr, *jmPtr)
+        db, _ = sql.Open("sqlite3", *namePtr)
+
+        _, err := db.Exec(fmt.Sprintf("PRAGMA synchronous = %s;", *syncPtr))
+        if err != nil {
+            panic(err)
+        }
+
+        _, err = db.Exec(fmt.Sprintf("PRAGMA journal_mode = %s;", *jmPtr))
+        if err != nil {
+            panic(err)
+        }
+
         insertTxt = "insert into foo (name) values (?);"
-	    defer db.Close()
+        defer db.Close()
     } else {
         fmt.Printf("sqlite:\n")
         sqliteCmd.PrintDefaults()
