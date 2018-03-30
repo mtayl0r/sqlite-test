@@ -1,7 +1,7 @@
 # Go Sqlite Insert Test
 These are some tests of Sqlite ([using mattn's go-sqlite3 bindings](https://github.com/mattn/go-sqlite3)) insert performance following the findings from [this stackoverflow link](https://stackoverflow.com/questions/1711631/improve-insert-per-second-performance-of-sqlite).
 
-Insert are tested against a table:
+Inserts are tested by inserting random strings against a table:
 
 ```sql
 CREATE TABLE FOO (
@@ -11,7 +11,7 @@ CREATE TABLE FOO (
 ```
 
 ## simpleTest.go
-Performs batch inserts (ie one after the other):
+Performs serial inserts (ie one after the other), no concurrency:
 1. In a transaction.
 2. As a prepared statement.
 3. Plain insert.
