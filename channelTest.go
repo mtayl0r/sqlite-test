@@ -12,13 +12,11 @@ import (
     "net/http"
     "database/sql"
     _ "github.com/mattn/go-sqlite3"
-    _ "github.com/lib/pq"
 )
 
 
 var insertCount = 0
 
-var insertTxt string
 var db *sql.DB
 var insertChannel = make(chan string)
 var mutex = &sync.Mutex{}
@@ -52,7 +50,6 @@ func main() {
         panic(err)
     }
 
-    insertTxt = "insert into foo (name) values (?);"
     defer db.Close()
 
     // set handlers

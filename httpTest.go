@@ -4,7 +4,7 @@ import (
     "os"
     "flag"
     "fmt"
-    "strconv"
+    "sync"
     "math/rand"
     "net/http"
     "database/sql"
@@ -12,66 +12,35 @@ import (
     _ "github.com/lib/pq"
 )
 
-func simple(w http.ResponseWriter, r *http.Request) {
-    fmt.Fprintf(w, "Hello world")
-    insertCount = 0
-}
-
-func query(w http.ResponseWriter, r *http.Request) {
-    var s = querySql()
-    fmt.Fprintf(w, "Hi there, I love %s!", s)
-}
-
-func querySql() string {
-    rows, err := db.Query("select * from foo where id = 2;")
-    if err != nil {
-        panic(err)
-    }
-    defer rows.Close()
-    var name string
-    for rows.Next() {
-        var id int
-        err = rows.Scan(&id, &name)
-        if err != nil {
-            panic(err)
-        }
-    }
-    return name
-}
-
-func insertSql(s string) int {
-    insertCount += 1
-    s = s + strconv.Itoa(insertCount)
-    _, err := db.Exec("insert into foo(name) values('" + s + "');")
-    if err != nil {
-        return 0
-    }
-    return 1
-}
-
-func mix(w http.ResponseWriter, r *http.Request) {
-    var i = rand.Intn(10)
-    if i > 6 {
-        // insert
-        var s = randString(10)
-        var i = insertSql(s)
-        fmt.Fprintf(w, "insert: %i %s", i, s)
-    } else {
-        // query
-        var s = querySql()
-        fmt.Fprintf(w, "query: %s", s)
-    }
-}
-
 func insert(w http.ResponseWriter, r *http.Request) {
     var s = randString(10)
-    var i = insertSql(s)
-    fmt.Fprintf(w, "insert: %i %s", i, s)
+
+    _, err := db.Exec("insert into foo(name) values('" + s + "');")
+
+    if err != nil {
+        fmt.Fprintf(w, "insert error")
+        return
+    }
+
+    fmt.Fprintf(w, "insert: %s", s)
 }
 
-var insertCount = 0
+var mutex = sync.Mutex{}
+func insertMutex(w http.ResponseWriter, r *http.Request) {
+     var s = randString(10)
 
-var insertTxt string
+    mutex.Lock()
+    _, err := db.Exec("insert into foo(name) values('" + s + "');")
+    mutex.Unlock()
+
+    if err != nil {
+        fmt.Fprintf(w, "insertMutex error")
+        return
+    }
+
+    fmt.Fprintf(w, "insertMutex: %s", s)
+}
+
 var db *sql.DB
 
 func main() {
@@ -97,11 +66,11 @@ func main() {
         connStr := fmt.Sprintf("user=%s password=%s dbname=%s sslmode=disable", *userPtr, *passwordPtr, *dbNamePtr)
         fmt.Printf(connStr + "\n")
         db, _ = sql.Open("postgres", connStr)
-        insertTxt = "insert into foo (name) values ($1);"
         defer db.Close()
     } else if sqliteCmd.Parsed() {
         fmt.Printf("sqlite: %s %s %s\n", *namePtr, *syncPtr, *jmPtr)
         db, _ = sql.Open("sqlite3", *namePtr)
+        defer db.Close()
 
         _, err := db.Exec(fmt.Sprintf("PRAGMA synchronous = %s;", *syncPtr))
         if err != nil {
@@ -113,8 +82,6 @@ func main() {
             panic(err)
         }
 
-        insertTxt = "insert into foo (name) values (?);"
-        defer db.Close()
     } else {
         fmt.Printf("sqlite:\n")
         sqliteCmd.PrintDefaults()
@@ -124,10 +91,8 @@ func main() {
     }
 
 
-    http.HandleFunc("/simple", simple)
-    http.HandleFunc("/query", query)
     http.HandleFunc("/insert", insert)
-    http.HandleFunc("/mix", mix)
+    http.HandleFunc("/insertMutex", insertMutex)
     http.ListenAndServe(":8000", nil)
 }
 
